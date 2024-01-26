@@ -13,30 +13,32 @@ namespace ChristmasThing
 {
     public class MainWindowViewModel : INotifyPropertyChanged
     {
+        private const int _historicalDuplicationInYears = 2;
         public ObservableCollection<ParticipantViewModel> Participants { get; } = new ObservableCollection<ParticipantViewModel>();
         public ObservableCollection<ParticipantViewModel> SelectedParticipants { get; } = new ObservableCollection<ParticipantViewModel>();
         public ObservableCollection<int> AvailableGiftExchangeYears { get; } = new ObservableCollection<int>();
         public ObservableCollection<ParticipantViewModel> AvailableSignificantOthers { get; } = new ObservableCollection<ParticipantViewModel>();
-        private Dictionary<int, List<GiftExchangeViewModel>> _giftExchanges = new Dictionary<int, List<GiftExchangeViewModel>>();
-
-        private IList<GiftExchangeViewModel> _newGiftExchanges = new List<GiftExchangeViewModel>();
-
+        private Dictionary<int, List<GiftExchangeViewModel>> _historicalGiftExchanges = new Dictionary<int, List<GiftExchangeViewModel>>();
+        public ObservableCollection<SecretSantaExchangeViewModel> NewSecretSantaExchanges { get; } = new ObservableCollection<SecretSantaExchangeViewModel>();
         public Canvas HistoricalGiftExchangeCanvas { get; set; } = new Canvas { Height = 600, Width = 800 };
         public Canvas NewGiftExchangeCanvas { get; set; } = new Canvas { Height = 600, Width = 800 };
-
         private readonly SqlConnection _connection;
 
-        private IList<GiftExchangeViewModel> CreateNewGiftExchange(IList<ParticipantViewModel> participants)
+        private void CreateNewGiftExchange(IList<ParticipantViewModel> participants)
         {
-            var year = DateTime.Now.Year;
+            NewSecretSantaExchanges.Clear();
+
+            var orderedParticipants = participants.OrderBy(p => p.Name).ToList();
+
+            var year = 2025; //DateTime.Now.Year;
             var list = new List<GiftExchangeViewModel>();
-            var recentGiftExchanges = GetRecentGiftExchanges(2);
+            var recentGiftExchanges = GetRecentGiftExchanges(_historicalDuplicationInYears);
 
             var listOfValidExchanges = new List<GiftExchangeViewModel>();
-            foreach (var participant in participants)
+            foreach (var participant in orderedParticipants)
             {
                 var listOfRecentReceivers = recentGiftExchanges.Where(e => e.GiverId == participant.Id).Select(e => e.ReceiverId);
-                var listOfValidReceivers = participants.Where(p => p.Id != participant.Id && p.Id != participant.SignificantOtherId && !listOfRecentReceivers.Contains(p.Id));
+                var listOfValidReceivers = orderedParticipants.Where(p => p.Id != participant.Id && p.Id != participant.SignificantOtherId && !listOfRecentReceivers.Contains(p.Id));
 
                 foreach (var receiver in listOfValidReceivers)
                 {
@@ -44,17 +46,15 @@ namespace ChristmasThing
                 }
             }
 
-            GetValid(participants.ToList(), listOfValidExchanges, list, participants.First().Id, participants.First().Id);
-
-            return list;
+            CreateValidGiftExchanges(orderedParticipants, listOfValidExchanges, list, orderedParticipants.First().Id, orderedParticipants.First().Id);
         }
 
-        private bool GetValid(IList<ParticipantViewModel> participants, List<GiftExchangeViewModel> validExchanges, List<GiftExchangeViewModel> list, Guid giverId, Guid endingReceiverId)
+        private void CreateValidGiftExchanges(IList<ParticipantViewModel> participants, List<GiftExchangeViewModel> validExchanges, List<GiftExchangeViewModel> list, Guid giverId, Guid endingReceiverId)
         {
             var participant = participants.FirstOrDefault(p => p.Id == giverId);
             if (participant is null)
             {
-                return false;
+                return;
             }
 
             var valids = validExchanges.Where(e => e.GiverId == giverId);
@@ -68,7 +68,10 @@ namespace ChristmasThing
                     {
                         list.Add(giftExchange);
 
-                        return true;
+                        // add to list
+                        NewSecretSantaExchanges.Add(new SecretSantaExchangeViewModel(list, NewSecretSantaExchanges.Count + 1));
+                        list.Remove(giftExchange);
+                        return;
                     }
                     else
                     {
@@ -77,18 +80,13 @@ namespace ChristmasThing
                 }
                 else
                 {
-                    if ((list.Count == 0 || endingReceiverId != giftExchange.ReceiverId) && !list.Any(e => e.ReceiverId == giftExchange.ReceiverId && e.GiverId != giftExchange.ReceiverId))
+                    if ((list.Count == 0 || endingReceiverId != giftExchange.ReceiverId) && IsAbleToBeAdded(list, giftExchange))
                     {
                         list.Add(giftExchange);
 
-                        if (GetValid(participants.ToList(), validExchanges, list, giftExchange.ReceiverId, endingReceiverId))
-                        {
-                            return true;
-                        }
-                        else
-                        {
-                            list.Remove(giftExchange);
-                        }
+                        CreateValidGiftExchanges(participants.ToList(), validExchanges, list.ToList(), giftExchange.ReceiverId, endingReceiverId);
+
+                        list.Remove(giftExchange);
                     }
                     else
                     {
@@ -96,26 +94,33 @@ namespace ChristmasThing
                     }
                 }
             }
+        }
 
-            return false;
+        private bool IsAbleToBeAdded(List<GiftExchangeViewModel> list, GiftExchangeViewModel giftExchange)
+        {
+            bool duplicateGiver = list.Any(e => e.GiverId == giftExchange.GiverId);
+            bool duplicateReceiver = list.Any(e => e.ReceiverId == giftExchange.ReceiverId);
+            bool earlyClosure = list.Any(e => e.GiverId == giftExchange.ReceiverId);
+
+            return !duplicateGiver && !duplicateReceiver;
         }
 
         private IList<GiftExchangeViewModel> GetRecentGiftExchanges(int historyToGet)
         {
             var list = new List<GiftExchangeViewModel>();
-            var year = DateTime.Now.Year;
+            var year = 2025; //DateTime.Now.Year;
             int count = 0;
             int i = 1;
 
             while (count < historyToGet)
             {
-                if (_giftExchanges.ContainsKey(year - i))
+                if (_historicalGiftExchanges.ContainsKey(year - i))
                 {
-                    list.AddRange(_giftExchanges[year - i].ToList());
+                    list.AddRange(_historicalGiftExchanges[year - i].ToList());
                     count++;
                 }
 
-                if (year - i < _giftExchanges.Keys.Min())
+                if (year - i < _historicalGiftExchanges.Keys.Min())
                 {
                     break;
                 }
@@ -144,10 +149,10 @@ namespace ChristmasThing
             var giftExchanges = LoadGiftExchanges();
             foreach (var giftExchange in giftExchanges)
             {
-                if (!_giftExchanges.ContainsKey(giftExchange.Year))
+                if (!_historicalGiftExchanges.ContainsKey(giftExchange.Year))
                 {
                     AvailableGiftExchangeYears.Add(giftExchange.Year);
-                    _giftExchanges.Add(giftExchange.Year, new List<GiftExchangeViewModel>());
+                    _historicalGiftExchanges.Add(giftExchange.Year, new List<GiftExchangeViewModel>());
                 }
 
                 var g = new GiftExchangeViewModel(giftExchange)
@@ -155,7 +160,7 @@ namespace ChristmasThing
                     GiverName = Participants.First(p => p.Id == giftExchange.GiverId).Name,
                     ReceiverName = Participants.First(p => p.Id == giftExchange.ReceiverId).Name,
                 };
-                _giftExchanges[giftExchange.Year].Add(g);
+                _historicalGiftExchanges[giftExchange.Year].Add(g);
             }
 
             AddNewParticipantCommand = new DelegateCommand(AddNewParticipantCommandExecute, AddNewParticipantCommandCanExecute);
@@ -335,29 +340,38 @@ namespace ChristmasThing
             }
         }
 
-        private string _newGiftExchangeDisplayText = string.Empty;
-        public string NewGiftExchangeDisplayText
+        private SecretSantaExchangeViewModel _selectedSecretSantaExchange;
+        public SecretSantaExchangeViewModel SelectedSecretSantaExchange
         {
-            get => _newGiftExchangeDisplayText;
+            get => _selectedSecretSantaExchange;
             set
             {
-                _newGiftExchangeDisplayText = value;
-                OnPropertyChanged(nameof(NewGiftExchangeDisplayText));
+                _selectedSecretSantaExchange = value;
+                OnPropertyChanged(nameof(SelectedSecretSantaExchange));
+
+                if (_selectedSecretSantaExchange is not null)
+                {
+                    UpdateCanvas(_selectedSecretSantaExchange.GiftExchanges.OrderBy(e => e.GiverName).ToList(), NewGiftExchangeCanvas);
+                }
+                else
+                {
+                    NewGiftExchangeCanvas?.Children?.Clear();
+                }
             }
         }
 
-        private int _selectedGiftExchangeYear;
-        public int SelectedGiftExchangeYear
+        private int _selectedHistoricalGiftExchangeYear;
+        public int SelectedHistoricalGiftExchangeYear
         {
-            get => _selectedGiftExchangeYear;
+            get => _selectedHistoricalGiftExchangeYear;
             set
             {
-                _selectedGiftExchangeYear = value;
-                OnPropertyChanged(nameof(SelectedGiftExchangeYear));
+                _selectedHistoricalGiftExchangeYear = value;
+                OnPropertyChanged(nameof(SelectedHistoricalGiftExchangeYear));
 
-                if (_giftExchanges.ContainsKey(SelectedGiftExchangeYear))
+                if (_historicalGiftExchanges.ContainsKey(SelectedHistoricalGiftExchangeYear))
                 {
-                    UpdateCanvas(_giftExchanges[SelectedGiftExchangeYear].OrderBy(e => e.GiverName).ToList(), HistoricalGiftExchangeCanvas);
+                    UpdateCanvas(_historicalGiftExchanges[SelectedHistoricalGiftExchangeYear].OrderBy(e => e.GiverName).ToList(), HistoricalGiftExchangeCanvas);
                 }
             }
         }
@@ -369,7 +383,7 @@ namespace ChristmasThing
 
         private void SaveNewGiftExchangeCommandExecute(object obj)
         {
-            foreach (var giftExchange in _newGiftExchanges)
+            foreach (var giftExchange in SelectedSecretSantaExchange.GiftExchanges.ToList())
             {
                 AddGiftExchange(giftExchange);
             }
@@ -384,11 +398,7 @@ namespace ChristmasThing
 
         private void CreateNewGiftExchangeCommandExecute(object obj)
         {
-            _newGiftExchanges = CreateNewGiftExchange(SelectedParticipants.ToList());
-
-            NewGiftExchangeDisplayText = string.Join(Environment.NewLine, _newGiftExchanges.Select(a => a.ToString()));
-
-            UpdateCanvas(_newGiftExchanges.OrderBy(e => e.GiverName).ToList(), NewGiftExchangeCanvas);
+            CreateNewGiftExchange(SelectedParticipants.ToList());
         }
 
         public ICommand CreateNewGiftExchangeCommand { get; set; }
