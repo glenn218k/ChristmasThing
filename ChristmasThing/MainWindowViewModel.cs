@@ -1,4 +1,5 @@
-﻿using System.Collections.ObjectModel;
+﻿using ChristmasLibrary;
+using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Data.SqlClient;
 using System.Reflection;
@@ -16,6 +17,7 @@ namespace ChristmasThing
         private const int _historicalDuplicationInYears = 2;
         public ObservableCollection<ParticipantViewModel> Participants { get; } = new ObservableCollection<ParticipantViewModel>();
         public ObservableCollection<ParticipantViewModel> SelectedParticipants { get; } = new ObservableCollection<ParticipantViewModel>();
+
         public ObservableCollection<int> AvailableGiftExchangeYears { get; } = new ObservableCollection<int>();
         public ObservableCollection<ParticipantViewModel> AvailableSignificantOthers { get; } = new ObservableCollection<ParticipantViewModel>();
         private Dictionary<int, List<GiftExchangeViewModel>> _historicalGiftExchanges = new Dictionary<int, List<GiftExchangeViewModel>>();
@@ -131,10 +133,12 @@ namespace ChristmasThing
             return list;
         }
 
-        public MainWindowViewModel() 
+        private void Initialize()
         {
-            string directory = System.IO.Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location) ?? string.Empty;
-            _connection = new SqlConnection(@$"Data Source=(LocalDB)\MSSQLLocalDB;AttachDbFilename={directory}\SecretSanta.mdf;Integrated Security=True;Connect Timeout=30");
+            AvailableSignificantOthers?.Clear();
+            Participants?.Clear();
+            AvailableGiftExchangeYears?.Clear();
+            _historicalGiftExchanges?.Clear();
 
             var participants = LoadParticipants();
 
@@ -162,8 +166,17 @@ namespace ChristmasThing
                 };
                 _historicalGiftExchanges[giftExchange.Year].Add(g);
             }
+        }
+
+        public MainWindowViewModel() 
+        {
+            string directory = System.IO.Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location) ?? string.Empty;
+            _connection = new SqlConnection(@$"Data Source=(LocalDB)\MSSQLLocalDB;AttachDbFilename={directory}\SecretSanta.mdf;Integrated Security=True;Connect Timeout=30");
+
+            Initialize();
 
             AddNewParticipantCommand = new DelegateCommand(AddNewParticipantCommandExecute, AddNewParticipantCommandCanExecute);
+            SaveEditedParticipantCommand = new DelegateCommand(SaveEditedParticipantCommandExecute, SaveEditedParticipantCommandCanExecute);
             CreateNewGiftExchangeCommand = new DelegateCommand(CreateNewGiftExchangeCommandExecute, CreateNewGiftExchangeCommandCanExecute);
             SaveNewGiftExchangeCommand = new DelegateCommand(SaveNewGiftExchangeCommandExecute, SaveNewGiftExchangeCommandCanExecute);
         }
@@ -340,6 +353,48 @@ namespace ChristmasThing
             }
         }
 
+        private ParticipantViewModel _selectedParticipantToEdit;
+        public ParticipantViewModel? SelectedParticipantToEdit
+        {
+            get => _selectedParticipantToEdit;
+            set
+            {
+                if(_selectedParticipantToEdit != value)
+                {
+                    _selectedParticipantToEdit = value;
+
+                    if(_selectedParticipantToEdit is not null)
+                    {
+                        SelectedParticipantToEditNewName = _selectedParticipantToEdit.Name;
+                        SelectedParticipantToEditNewSigOther = AvailableSignificantOthers?.FirstOrDefault(s => s.Id == _selectedParticipantToEdit.SignificantOtherId);
+                    }
+                }
+                OnPropertyChanged(nameof(SelectedParticipantToEdit));
+            }
+        }
+
+        private string _selectedParticipantToEditNewName;
+        public string? SelectedParticipantToEditNewName
+        {
+            get => _selectedParticipantToEditNewName;
+            set
+            {
+                _selectedParticipantToEditNewName = value;
+                OnPropertyChanged(nameof(SelectedParticipantToEditNewName));
+            }
+        }
+
+        private ParticipantViewModel? _selectedParticipantToEditNewSigOther;
+        public ParticipantViewModel? SelectedParticipantToEditNewSigOther
+        {
+            get => _selectedParticipantToEditNewSigOther;
+            set
+            {
+                _selectedParticipantToEditNewSigOther = value;
+                OnPropertyChanged(nameof(SelectedParticipantToEditNewSigOther));
+            }
+        }
+
         private SecretSantaExchangeViewModel _selectedSecretSantaExchange;
         public SecretSantaExchangeViewModel SelectedSecretSantaExchange
         {
@@ -361,6 +416,7 @@ namespace ChristmasThing
         }
 
         private int _selectedHistoricalGiftExchangeYear;
+
         public int SelectedHistoricalGiftExchangeYear
         {
             get => _selectedHistoricalGiftExchangeYear;
@@ -415,6 +471,38 @@ namespace ChristmasThing
 
         public ICommand AddNewParticipantCommand { get; set; }
 
+        private bool SaveEditedParticipantCommandCanExecute(object obj)
+        {
+            return SelectedParticipantToEdit is not null
+                && 
+                    (SelectedParticipantToEditNewName != SelectedParticipantToEdit.Name
+                    || SelectedParticipantToEditNewSigOther?.Id != SelectedParticipantToEdit.SignificantOtherId);
+        }
+
+        private void SaveEditedParticipantCommandExecute(object obj)
+        {
+            var newSigOtherId = SelectedParticipantToEditNewSigOther?.Id;
+            var oldSigOtherId = SelectedParticipantToEdit?.SignificantOtherId;
+            if (newSigOtherId != oldSigOtherId) // if sigIds dont match,
+            {
+                if (oldSigOtherId.HasValue)
+                {
+                    // need to clear the old sig other's sigId if there was one
+                    UpdateSigOther(oldSigOtherId.Value);
+                }
+
+                if (newSigOtherId.HasValue)
+                {
+                    // need to update the new sig other's sigId
+                    UpdateSigOther(newSigOtherId.Value, SelectedParticipantToEdit.Id);
+                }
+            }
+
+            SaveParticipant(SelectedParticipantToEdit.Id, SelectedParticipantToEditNewName ?? SelectedParticipantToEdit.Name, SelectedParticipantToEditNewSigOther?.Id ?? SelectedParticipantToEdit.SignificantOtherId);
+        }
+
+        public ICommand SaveEditedParticipantCommand { get; set; }
+
         private IList<GiftExchange> LoadGiftExchanges()
         {
             _connection.Open();
@@ -461,6 +549,51 @@ namespace ChristmasThing
             _connection.Close();
 
             return participants;
+        }
+
+        private void SaveParticipant(Guid id, string name, Guid? significantOtherId)
+        {
+            _connection.Open();
+
+            var command = new SqlCommand($"update Participant SET Name = @Name, SignificantOtherId = @SoId WHERE Id = @Id", _connection);
+            command.Parameters.AddWithValue("@Id", id.ToString());
+            command.Parameters.AddWithValue("@Name", name);
+            command.Parameters.AddWithValue("@SoId", significantOtherId?.ToString() ?? null);
+
+            command.ExecuteNonQuery();
+
+            _connection.Close();
+
+            SelectedParticipantToEdit = null;
+            SelectedParticipantToEditNewName = null;
+            SelectedParticipantToEditNewSigOther = null;
+
+            Initialize();
+        }
+
+        private void UpdateSigOther(Guid id, Guid significantOtherId)
+        {
+            _connection.Open();
+
+            var command = new SqlCommand($"update Participant SET SignificantOtherId = @SoId WHERE Id = @Id", _connection);
+            command.Parameters.AddWithValue("@Id", id.ToString());
+            command.Parameters.AddWithValue("@SoId", significantOtherId.ToString());
+
+            command.ExecuteNonQuery();
+
+            _connection.Close();
+        }
+
+        private void UpdateSigOther(Guid id)
+        {
+            _connection.Open();
+
+            var command = new SqlCommand($"update Participant SET SignificantOtherId = NULL WHERE Id = @Id", _connection);
+            command.Parameters.AddWithValue("@Id", id.ToString());
+
+            command.ExecuteNonQuery();
+
+            _connection.Close();
         }
 
         private void AddParticipant(Guid id, string name, Guid? significantOtherId)

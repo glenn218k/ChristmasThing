@@ -43,7 +43,7 @@
             <Grid>
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto" />
-                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="5" />
                     <RowDefinition Height="Auto" />
                     <RowDefinition Height="Auto" />
                     <RowDefinition Height="Auto" />
@@ -103,6 +103,67 @@
                             Height="30"
                             Command="{Binding AddNewParticipantCommand}"
                             Content="Add New Participant" />
+                    </Grid>
+                </GroupBox>
+                <GroupBox
+                    Grid.Row="3"
+                    Grid.Column="0"
+                    Header="Edit Participant">
+                    <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="5" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="5" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="5" />
+                            <RowDefinition Height="Auto" />
+                        </Grid.RowDefinitions>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="5" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+
+                        <Label
+                            Grid.Row="0"
+                            Grid.Column="0"
+                            Content="Select Participant" />
+                        <ComboBox
+                            Grid.Row="0"
+                            Grid.Column="2"
+                            DisplayMemberPath="Name"
+                            ItemsSource="{Binding Source={StaticResource ParticipantsKey}}"
+                            SelectedValue="{Binding SelectedParticipantToEdit}" />
+
+                        <Label
+                            Grid.Row="2"
+                            Grid.Column="0"
+                            Content="Edit Name" />
+                        <TextBox
+                            Grid.Row="2"
+                            Grid.Column="2"
+                            MinWidth="200"
+                            Text="{Binding SelectedParticipantToEditNewName, UpdateSourceTrigger=PropertyChanged}" />
+
+                        <Label
+                            Grid.Row="4"
+                            Grid.Column="0"
+                            Content="Edit Significant Other" />
+                        <ComboBox
+                            Grid.Row="4"
+                            Grid.Column="2"
+                            DisplayMemberPath="Name"
+                            ItemsSource="{Binding Source={StaticResource AvailableSignificantOthersKey}}"
+                            SelectedValue="{Binding SelectedParticipantToEditNewSigOther}" />
+
+                        <Button
+                            Grid.Row="6"
+                            Grid.Column="0"
+                            Grid.ColumnSpan="3"
+                            Height="30"
+                            Command="{Binding SaveEditedParticipantCommand}"
+                            Content="Save Edited Participant" />
                     </Grid>
                 </GroupBox>
             </Grid>

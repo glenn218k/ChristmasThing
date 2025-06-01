@@ -1,0 +1,102 @@
+﻿@using DataAccessLibrary.Models
+@using static BlazorApp1.Components.Pages.GiftExchanges
+
+@if (GiftExchange != null)
+{
+    <h2>@_currentYear</h2>
+
+    <h2>@GiftExchange.GiftExchangeData.Count</h2>
+
+    @foreach (var s in _displayStrings)
+    {
+        <h1>@s</h1>
+    }
+}
+@code {
+    [Parameter]
+    public HistoricalGiftExchange GiftExchange { get; set; }
+
+    private static readonly string _emptyString = string.Empty;
+    private List<string> _displayStrings = [];
+    private int _currentYear;
+    private int _howManySeparatorsNeeded;
+
+    protected async override Task OnParametersSetAsync()
+    {
+        if (GiftExchange?.Year is int year
+            && _currentYear != year)
+        {
+            UpdateDisplay([.. GiftExchange.GiftExchangeData]);
+            _currentYear = year;
+        }
+    }
+
+    private static int DetermineCycleCount(IList<DisplayData> giftExchanges)
+    {
+        var retVal = 0;
+        var giverId = giftExchanges[0].GiverId;
+
+        while (true)
+        {
+            var exchange = giftExchanges.FirstOrDefault(e => e.GiverId == giverId);
+
+            if (exchange is null)
+            {
+                retVal++;
+
+                if (!giftExchanges.Any())
+                {
+                    break;
+                }
+
+                exchange = giftExchanges.First();
+            }
+
+            giftExchanges.Remove(exchange);
+
+            giverId = exchange.ReceiverId;
+        }
+
+        return retVal;
+    }
+
+    private void UpdateDisplay(IList<DisplayData> giftExchanges)
+    {
+        _displayStrings.Clear();
+        _howManySeparatorsNeeded = DetermineCycleCount([.. giftExchanges]) - 1;
+
+        var exchanges = giftExchanges.ToList();
+
+        var firstExchange = exchanges.OrderBy(e => e.GiverName).FirstOrDefault();
+
+        if (firstExchange is null)
+        {
+            return;
+        }
+
+        var giverId = firstExchange.GiverId;
+        var giverName = firstExchange.GiverName;
+
+        while (true)
+        {
+            var exchange = exchanges.FirstOrDefault(e => e.GiverId == giverId);
+
+            if (exchange is null)
+            {
+                if (!exchanges.Any())
+                {
+                    return;
+                }
+
+                exchange = exchanges.First();
+
+                _displayStrings.Add("---------------------------");
+            }
+
+            exchanges.Remove(exchange);
+            giverId = exchange.ReceiverId;
+
+            _displayStrings.Add($"{exchange.GiverName} has {exchange.ReceiverName}");
+        }
+    }
+}

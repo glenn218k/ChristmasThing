@@ -1,6 +1,4 @@
-﻿using ChristmasLibrary;
-
-namespace ChristmasThing
+﻿namespace ChristmasLibrary
 {
     public class GiftExchangeViewModel
     {

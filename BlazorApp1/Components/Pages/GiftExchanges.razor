@@ -1,0 +1,91 @@
+﻿@page "/Data/GiftExchanges"
+@rendermode InteractiveServer
+
+@using DataAccessLibrary
+@using DataAccessLibrary.Models
+
+@inject IGiftExchangeData _giftExchangeDb
+@inject IParticipantData _participantDb
+
+<PageTitle>Gift Exchanges</PageTitle>
+
+<h1>Gift Exchanges</h1>
+
+@if (_historicalGiftExchanges == null)
+{
+    <p><em>Loading...</em></p>
+}
+else
+{
+    @foreach (var giftExchangeYear in _historicalGiftExchanges.OrderByDescending(d => d.Key))
+    {
+        <li @onclick="@(() => OnClickHandler(giftExchangeYear.Value))">
+            @giftExchangeYear.Key
+        </li>
+    }
+
+    <GiftExchangeDetail GiftExchange=@_selectedGiftExchange></GiftExchangeDetail>
+}
+
+@code {
+    private List<GiftExchangeModel> _giftExchanges = [];
+    private List<ParticipantModel> _participants = [];
+    private List<ParticipantModel> _availableSignificantOthers = [];
+    private List<int> _vailableGiftExchangeYears = [];
+    private Dictionary<int, HistoricalGiftExchange> _historicalGiftExchanges = new Dictionary<int, HistoricalGiftExchange>();
+
+    private HistoricalGiftExchange _selectedGiftExchange;
+
+    private void OnClickHandler(HistoricalGiftExchange historicalGiftExchange)
+    {
+        _selectedGiftExchange = historicalGiftExchange;
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        await Init();
+    }
+
+    private async Task Init()
+    {
+        _availableSignificantOthers.Clear();
+        _giftExchanges.Clear();
+        _participants.Clear();
+
+        _availableSignificantOthers = [new ParticipantModel()];
+        _giftExchanges = await _giftExchangeDb.GetGiftExchanges();
+        _participants = await _participantDb.GetParticipants();
+        _availableSignificantOthers.AddRange(_participants);
+
+        foreach (var g in _giftExchanges)
+        {
+            if (!_historicalGiftExchanges.ContainsKey(g.Year))
+            {
+                _vailableGiftExchangeYears.Add(g.Year);
+                _historicalGiftExchanges.Add(g.Year, new() { Year = g.Year });
+            }
+
+            var giverId = Guid.Parse(g.GiverId);
+            var receiverId = Guid.Parse(g.ReceiverId);
+            var giver = _participants.First(p => p.Id == giverId);
+            var receiver = _participants.First(p => p.Id == receiverId);
+            _historicalGiftExchanges[g.Year].GiftExchangeData.Add(new() { Year = g.Year, GiverId = giverId, GiverName = giver.Name, ReceiverId = receiverId, ReceiverName = receiver.Name });
+        }
+    }
+
+    public class DisplayData
+    {
+        public int Year { get; set; }
+        public Guid GiverId { get; set; }
+        public string GiverName { get; set; }
+        public Guid ReceiverId { get; set; }
+        public string ReceiverName { get; set; }
+    }
+
+    public class HistoricalGiftExchange
+    {
+        public int Year { get; set; }
+
+        public List<DisplayData> GiftExchangeData { get; set; } = [];
+    }
+}

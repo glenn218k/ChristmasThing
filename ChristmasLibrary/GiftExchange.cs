@@ -1,4 +1,4 @@
-﻿namespace ChristmasThing
+﻿namespace ChristmasLibrary
 {
     public class GiftExchange
     {
