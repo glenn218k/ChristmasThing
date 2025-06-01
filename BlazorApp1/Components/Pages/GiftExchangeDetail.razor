@@ -3,13 +3,11 @@
 
 @if (GiftExchange != null)
 {
-    <h2>@_currentYear</h2>
-
-    <h2>@GiftExchange.GiftExchangeData.Count</h2>
+    <h1>@_currentYear</h1>
 
     @foreach (var s in _displayStrings)
     {
-        <h1>@s</h1>
+        <h2>@s</h2>
     }
 }
 @code {

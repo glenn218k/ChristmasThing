@@ -19,9 +19,9 @@ else
 {
     @foreach (var giftExchangeYear in _historicalGiftExchanges.OrderByDescending(d => d.Key))
     {
-        <li @onclick="@(() => OnClickHandler(giftExchangeYear.Value))">
+        <h2 @onclick="@(() => OnClickHandler(giftExchangeYear.Value))">
             @giftExchangeYear.Key
-        </li>
+        </h2>
     }
 
     <GiftExchangeDetail GiftExchange=@_selectedGiftExchange></GiftExchangeDetail>
